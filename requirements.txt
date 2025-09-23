@@ -1,0 +1,19 @@
+# Core ML and numerical computation
+torch==2.4.1
+numpy==2.1.1
+scipy==1.14.1
+
+# Machine learning utilities
+scikit-learn==1.5.2
+
+# Visualization
+matplotlib==3.9.2
+seaborn==0.13.2
+
+# Data handling and utilities
+pandas==2.2.2
+pathlib2==2.3.7  # For older Python compatibility
+
+# Optional: For advanced experiment tracking (uncomment if needed)
+# mlflow==2.16.2
+# wandb==0.17.8
