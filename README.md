@@ -1,39 +1,39 @@
-Temporal Polysemanticity Experiment Framework
+# Temporal Polysemanticity Experiment Framework
 
 A comprehensive framework for studying the temporal dynamics of polysemanticity in neural networks, with automatic intervention scheduling and critical period detection.
 
-Overview
+## Overview
 
 This implementation addresses fundamental questions in mechanistic interpretability:
-- How do polysemanticity patterns evolve during training?**
-- When are interventions most effective?**
-- What is the optimal schedule for applying mitigation strategies?**
+- **How do polysemanticity patterns evolve during training?**
+- **When are interventions most effective?**
+- **What is the optimal schedule for applying mitigation strategies?**
 
 The framework provides temporal tracking of the Polysemanticity Suppression Index (PSI) with automatic intervention triggers based on detected critical periods.
 
-Key Features
+## Key Features
 
-🔄 Temporal Dynamics Tracking
+### 🔄 Temporal Dynamics Tracking
 - Per-epoch PSI computation with efficient memory management
 - Critical period detection using gradient analysis
 - Intervention timing optimization
 
-🎯 Automatic Intervention System
+### 🎯 Automatic Intervention System
 - Threshold-triggered interventions (weight reset, orthogonal reset, noise injection)
 - Effectiveness tracking and adaptive strategy selection
 - Real-time intervention impact assessment
 
-📊 Comprehensive Analysis
+### 📊 Comprehensive Analysis
 - Multi-scale visualization of PSI evolution
 - Intervention effectiveness analysis
 - Comparative configuration analysis
 
-💾 Single-GPU Optimized
+### 💾 Single-GPU Optimized
 - Memory-efficient temporal tracking
 - Cached null baselines for PSI computation
 - Streamlined SAE training for real-time analysis
 
-Installation
+## Installation
 
 ```bash
 # Clone and setup environment
@@ -42,50 +42,50 @@ cd temporal-polysemanticity
 pip install -r requirements.txt
 ```
 
-Quick Start
+## Quick Start
 
-Single Experiment
+### Single Experiment
 ```bash
 python main.py --mode single --init orthogonal --act gelu --reg l2 --correlation_schedule increasing --epochs 200
 ```
 
-Full Ablation Study
+### Full Ablation Study
 ```bash
 python main.py --mode ablation --epochs 200
 ```
 
-Analyze Existing Results
+### Analyze Existing Results
 ```bash
 python main.py --mode analyze
 ```
 
-Configuration Options
+## Configuration Options
 
-Core Parameters
+### Core Parameters
 - `--init`: Initialization method (`random`, `orthogonal`)
 - `--act`: Activation function (`relu`, `gelu`)
 - `--reg`: Regularization type (`l1`, `l2`)
 - `--correlation_schedule`: Data correlation evolution (`static`, `increasing`, `decreasing`, `pulse`)
 
-Temporal Settings
+### Temporal Settings
 - `--epochs`: Training duration (default: 200)
 - PSI computation interval: Automatically set to epochs/20
 - Intervention check interval: Automatically set to epochs/10
 
-Understanding the Output
+## Understanding the Output
 
-Key Metrics
+### Key Metrics
 
-1. PSI Score: Lower is better (less polysemantic)
+1. **PSI Score**: Lower is better (less polysemantic)
    - `< 0.5`: Good interpretability
    - `0.5-1.0`: Moderate polysemanticity  
    - `> 1.0`: High polysemanticity, intervention needed
 
-2. Intervention Effectiveness: PSI reduction after intervention
+2. **Intervention Effectiveness**: PSI reduction after intervention
    - Positive values indicate successful PSI reduction
    - Tracked per intervention type for strategy optimization
 
-Generated Files
+### Generated Files
 
 ```
 experiments/temporal_experiment_YYYYMMDD_HHMMSS/
@@ -98,16 +98,16 @@ experiments/temporal_experiment_YYYYMMDD_HHMMSS/
 │   └── temporal_data.pt       # Raw temporal data
 ```
 
-Experimental Design
+## Experimental Design
 
-Temporal Data Generation
+### Temporal Data Generation
 The framework uses sophisticated data generation with time-varying complexity:
 - **Static**: Fixed feature correlations throughout training
 - **Increasing**: Gradually introduce feature correlations
 - **Decreasing**: Start with high correlations, reduce over time
 - **Pulse**: Periodic correlation changes to test adaptation
 
-PSI Computation
+### PSI Computation
 Implements proper polysemanticity measurement:
 1. **Per-neuron clustering**: Analyzes whether individual neurons respond to multiple distinct concepts
 2. **Feature interference**: Measures correlation between different SAE features
