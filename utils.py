@@ -8,36 +8,38 @@ def generate_data(cfg, seed=None):
         torch.manual_seed(seed)
         np.random.seed(seed)
     
-    # Generate correlated features
+    # Generate correlated features with added importance weighting for polysemanticity pressure
     batch_size = cfg.batch_size
     n_features = cfg.n_features
-    feature_groups = [[0, 1, 2], [3, 4], [5, 6, 7]]  # Groups with natural co-occurrences
+    feature_groups = [[0, 1, 2], [3, 4], [5, 6, 7]]  # Groups for co-occurrences
+    importances = np.array([0.9 ** i for i in range(n_features)])  # Decaying importances for non-uniform features
     
     x = torch.zeros(batch_size, n_features)
     
     for batch_idx in range(batch_size):
         active_groups = []
         for group_idx in range(len(feature_groups)):
-            if torch.rand(1) > 0.4:  # 60% chance each group activates
+            if torch.rand(1) > 0.4:  # 60% activation chance
                 active_groups.append(group_idx)
         
         for group_idx in active_groups:
             group_features = feature_groups[group_idx]
-            base_strength = torch.rand(1) * 0.8 + 0.2  # Correlation strength 0.2-1.0
+            base_strength = torch.rand(1) * 0.5 + 0.5  # Stronger min correlation 0.5-1.0 for more temptation
             shared_component = base_strength * torch.randn(1)
             for feat_idx in group_features:
                 indep_component = (1 - base_strength) * torch.randn(1)
                 x[batch_idx, feat_idx] = shared_component + indep_component
     
-    # Apply sparsity mask
-    mask = torch.rand_like(x) > 0.7  # 70% sparsity (30% active)
+    # Apply sparsity mask with adjusted probability for more co-occurrences
+    mask = torch.rand_like(x) > 0.5  # 50% sparsity (50% active) to increase feature interactions
     x = x * mask.float()
     
-    # Ensure non-negative
+    # Ensure non-negative activations
     x = torch.relu(x)
     
-    # Compute complex target
+    # Compute complex target and scale by importances
     y = complex_target_function(x)
+    y = y * torch.from_numpy(importances).float().unsqueeze(0)  # Weight targets by importance for loss emphasis
     
     # Train/val split
     val_size = int(batch_size * cfg.val_split)
@@ -45,13 +47,13 @@ def generate_data(cfg, seed=None):
     train_x, val_x = x[:train_size], x[train_size:]
     train_y, val_y = y[:train_size], y[train_size:]
     
-    return train_x, train_y, val_x, val_y
+    return train_x, train_y, val_x, val_y, importances  # Return importances for metrics
 
 def complex_target_function(x):
     batch_size, n_features = x.shape
     y = torch.zeros_like(x)
     
-    # Non-linear interactions with cross-group terms
+    # Non-linear interactions with cross-group terms for relational encoding
     y[:, 0] = x[:, 0] * x[:, 1] + 0.5 * x[:, 2]
     y[:, 1] = torch.sin(x[:, 0] + x[:, 2]) + x[:, 1]
     y[:, 2] = x[:, 0] ** 2 + x[:, 1] * x[:, 2]
@@ -70,22 +72,24 @@ def add_noise(hidden, noise_type, sigma, device):
         sign = (torch.rand_like(hidden, device=device) > 0.5).float() * 2 - 1
         return hidden + sign * sigma
     elif noise_type == 'positive_kurtosis':
-        # Heavy-tailed noise with positive kurtosis (t-dist df=3)
-        xi_np = t.rvs(df=3, size=hidden.shape)
-        xi = torch.from_numpy(xi_np).float().to(device) * sigma / np.sqrt(3)  # Normalize variance
+        xi_np = t.rvs(df=3, size=hidden.shape)  # Heavy-tailed for disruption
+        xi = torch.from_numpy(xi_np).float().to(device) * sigma / np.sqrt(3)  # Variance normalization
         return hidden + xi
     return hidden
 
-def compute_metrics(sae, acts, net_model, device, null_samples=50):
+def compute_metrics(sae, acts, net_model, device, importances, null_samples=200):  # Increased samples for stable calibration
+    # Normalize acts to prevent low variance issues in SAE
+    acts = (acts - acts.mean(dim=0)) / (acts.std(dim=0) + 1e-8)
+    
     # Primary: MACS on SAE decoder feature directions
-    decoder_weights = sae.decoder.weight.data  # Shape (hidden_dim, d_sae)
+    decoder_weights = sae.decoder.weight.data  # (hidden_dim, d_sae)
     norms = torch.norm(decoder_weights, dim=0, keepdim=True) + 1e-8
     normed = decoder_weights / norms
     cos_matrix = torch.mm(normed.T, normed)  # (d_sae, d_sae)
     off_diag = cos_matrix - torch.eye(cos_matrix.shape[0], device=device)
-    macs = torch.mean(torch.abs(off_diag)).item()  # Mean abs cos for i≠j
+    macs = torch.mean(torch.abs(off_diag)).item()
     
-    # Optional null calibration
+    # Null calibration with more samples for precision
     macs_nulls = []
     for _ in range(null_samples):
         perm_idx = torch.randperm(decoder_weights.shape[1], device=device)
@@ -98,20 +102,28 @@ def compute_metrics(sae, acts, net_model, device, null_samples=50):
     mu_null = np.mean(macs_nulls)
     std_null = np.std(macs_nulls) + 1e-8
     z_macs = (macs - mu_null) / std_null
-    calibrated_macs = 1 / (1 + np.exp(-z_macs))  # Sigmoid to [0,1]
+    calibrated_macs = 1 / (1 + np.exp(-z_macs))  # Sigmoid [0,1]
     
-    # Complementary: Sparsity - ||W||_4^4 on network weights (peakedness)
+    # Complementary: Sparsity - ||W||_4^4 on network weights
     all_weights = torch.cat([p.view(-1) for p in net_model.parameters() if p.dim() > 1])
     l4_norm = torch.norm(all_weights, p=4)
-    sparsity_w4 = (l4_norm ** 4 / all_weights.numel()).item()  # High = sparse/peaked
+    sparsity_w4 = (l4_norm ** 4 / all_weights.numel()).item()
     
     # L0 on SAE hidden (avg non-zero per sample)
     _, hidden_sae = sae(acts)
-    l0_sparsity = (hidden_sae > 0).float().mean().item()  # Fraction active
+    l0_sparsity = (hidden_sae > 0).float().mean().item()
     
-    # MSE for SAE recon
+    # SAE MSE
     recon, _ = sae(acts)
     sae_mse = torch.nn.functional.mse_loss(recon, acts).item()
+    
+    # Added: Interference metric weighted by importances
+    importances_t = torch.from_numpy(importances).float().to(device)
+    interference = 0.0
+    for i in range(cos_matrix.shape[0]):
+        for j in range(i+1, cos_matrix.shape[1]):
+            interference += (cos_matrix[i,j] ** 2) * importances_t[i % len(importances_t)] * importances_t[j % len(importances_t)]
+    interference = interference.item()
     
     return {
         'macs': macs,
@@ -119,7 +131,8 @@ def compute_metrics(sae, acts, net_model, device, null_samples=50):
         'sparsity_w4': sparsity_w4,
         'l0_sparsity': l0_sparsity,
         'sae_mse': sae_mse,
-        'cos_matrix': cos_matrix.cpu().numpy()  # For plotting
+        'interference': interference,
+        'cos_matrix': cos_matrix.cpu().numpy()
     }
 
 def plot_overlap(cos_matrix_np, title, path):
