@@ -24,7 +24,8 @@ def main():
     # Lists to collect metrics across seeds
     metrics_dict = {
         'macs': [], 'calibrated_macs': [], 'sparsity_w4': [], 
-        'l0_sparsity': [], 'sae_mse': [], 'train_mse': [], 'val_mse': []
+        'l0_sparsity': [], 'sae_mse': [], 'train_mse': [], 'val_mse': [],
+        'interference': []  # Added for weighted polysemanticity measure
     }
 
     for seed in range(args.seeds):
@@ -32,48 +33,48 @@ def main():
         np.random.seed(seed)
         logging.info(f'Starting seed {seed} with config: init={args.init}, noise={args.noise}, reg={args.reg}, act={args.act}')
 
-        # Generate and move data to device
-        train_x, train_y, val_x, val_y = generate_data(cfg, seed=seed)
+        # Generate data with importances
+        train_x, train_y, val_x, val_y, importances = generate_data(cfg, seed=seed)
         train_x, train_y = train_x.to(device), train_y.to(device)
         val_x, val_y = val_x.to(device), val_y.to(device)
 
-        # Train Network
+        # Train Network with increased epochs
         model = Network(cfg, init_type=args.init, act_type=args.act).to(device)
         optimizer = optim.Adam(model.parameters(), lr=cfg.lr, 
                                weight_decay=cfg.lambda_reg if args.reg == 'l2' else 0)
         criterion = F.mse_loss
 
-        # Register forward hook to extract hidden activations (last hidden before output)
+        # Forward hook for hidden acts
         hidden_acts = {}
         def hook_fn(module, input, output):
             hidden_acts['last_hidden'] = output
-        # Assuming the last activation is before the final Linear; index -2 is the last act_fn
-        model.network[-2].register_forward_hook(hook_fn)
+        model.network[-2].register_forward_hook(hook_fn)  # Last act before output
 
-        for epoch in range(cfg.epochs):
+        for epoch in range(2000):  # Increased epochs for better convergence
             model.train()
             optimizer.zero_grad()
-            # Forward with noise on hidden
-            _ = model(train_x)  # Triggers hook
+            _ = model(train_x)
             hidden = hidden_acts['last_hidden']
             noisy_hidden = add_noise(hidden, args.noise, cfg.sigma_noise, device)
-            pred = model.network[-1](noisy_hidden)  # Final linear on noisy hidden
+            pred = model.network[-1](noisy_hidden)
             loss = criterion(pred, train_y)
             if args.reg == 'l1':
-                l1_norm = sum(p.abs().sum() for p in model.parameters() if p.dim() > 1)  # Weights only
+                l1_norm = sum(p.abs().sum() for p in model.parameters() if p.dim() > 1)
                 loss += cfg.lambda_reg * l1_norm
             loss.backward()
             optimizer.step()
 
-            # Val MSE every 100 epochs
-            if epoch % 100 == 0 or epoch == cfg.epochs - 1:
+            # Monitor val MSE and dead neurons more frequently
+            if epoch % 50 == 0 or epoch == 1999:  # Every 50 epochs
                 model.eval()
                 with torch.no_grad():
                     pred_val = model(val_x)
                     val_loss = criterion(pred_val, val_y).item()
-                    logging.info(f'Seed {seed}, Epoch {epoch}: Val MSE {val_loss:.4f}')
+                    # Check dead neurons in network (fraction zero across batch)
+                    zero_frac = (hidden == 0).float().mean().item()
+                    logging.info(f'Seed {seed}, Epoch {epoch}: Val MSE {val_loss:.4f}, Net Dead Frac {zero_frac:.4f}')
 
-        # Final train/val MSE
+        # Final MSEs
         with torch.no_grad():
             pred_train = model(train_x)
             train_mse = criterion(pred_train, train_y).item()
@@ -82,27 +83,34 @@ def main():
         metrics_dict['train_mse'].append(train_mse)
         metrics_dict['val_mse'].append(val_mse)
 
-        # Extract clean hidden activations for SAE (no noise)
+        # Extract clean acts
         model.eval()
         with torch.no_grad():
-            _ = model(train_x)  # Triggers hook
+            _ = model(train_x)
             acts = hidden_acts['last_hidden'].detach()
 
-        # Train SAE
+        # Train SAE with increased epochs and monitoring
         sae = SAE(cfg).to(device)
         sae_optimizer = optim.Adam(sae.parameters(), lr=cfg.lr)
-        for sae_epoch in range(500):  # Separate epochs for SAE
+        for sae_epoch in range(1000):  # Increased for SAE convergence
             sae.train()
             sae_optimizer.zero_grad()
             recon, hidden = sae(acts)
-            loss = F.mse_loss(recon, acts) + cfg.lambda_reg * hidden.abs().sum()  # L1 on SAE hidden
+            loss = F.mse_loss(recon, acts) + cfg.lambda_reg * hidden.abs().sum()
             loss.backward()
             sae_optimizer.step()
 
-        # Compute metrics
-        seed_metrics = compute_metrics(sae, acts, model, device)
-        for key in ['macs', 'calibrated_macs', 'sparsity_w4', 'l0_sparsity', 'sae_mse']:
-            metrics_dict[key].append(seed_metrics[key])
+            # Monitor SAE L0/dead every 100 epochs
+            if sae_epoch % 100 == 0 or sae_epoch == 999:
+                with torch.no_grad():
+                    sae_l0 = (hidden > 0).float().mean().item()
+                    logging.info(f'Seed {seed}, SAE Epoch {sae_epoch}: L0 {sae_l0:.4f}')
+
+        # Compute metrics with importances
+        seed_metrics = compute_metrics(sae, acts, model, device, importances, null_samples=200)
+        for key in metrics_dict.keys():
+            if key in seed_metrics:
+                metrics_dict[key].append(seed_metrics[key])
 
         # Plot and log
         plot_overlap(seed_metrics['cos_matrix'], 
@@ -113,9 +121,10 @@ def main():
                      f'Sparsity W4 {seed_metrics["sparsity_w4"]:.4f}, '
                      f'L0 Sparsity {seed_metrics["l0_sparsity"]:.4f}, '
                      f'SAE MSE {seed_metrics["sae_mse"]:.4f}, '
+                     f'Interference {seed_metrics["interference"]:.4f}, '
                      f'Train MSE {train_mse:.4f}, Val MSE {val_mse:.4f}')
 
-    # Aggregate and final log/print
+    # Aggregate results
     for key, values in metrics_dict.items():
         avg = np.mean(values)
         std = np.std(values)
