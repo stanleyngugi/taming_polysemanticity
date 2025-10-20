@@ -1,240 +1,103 @@
-# Temporal Polysemanticity Experiment Framework
-
-A comprehensive framework for studying the temporal dynamics of polysemanticity in neural networks, with automatic intervention scheduling and critical period detection.
+# Polysemanticity Toy Model Experiment
 
 ## Overview
 
-This implementation addresses fundamental questions in mechanistic interpretability:
-- **How do polysemanticity patterns evolve during training?**
-- **When are interventions most effective?**
-- **What is the optimal schedule for applying mitigation strategies?**
+This repository contains a PyTorch-based toy model for studying incidental polysemanticity in neural networks, inspired by foundational work in mechanistic interpretability (MI). Polysemanticity refers to the phenomenon where individual neurons or latents activate for multiple unrelated features, complicating model auditability and safety. While superposition theory attributes this to capacity constraints, incidental polysemanticity arises from training artifacts like regularization or noise, even in overcapacity regimes.
 
-The framework provides temporal tracking of the Polysemanticity Suppression Index (PSI) with automatic intervention triggers based on detected critical periods.
+The experiment uses a simple MLP trained on synthetic correlated data, followed by a sparse autoencoder (SAE) to decompose representations and measure entanglement via metrics like Mean Absolute Cosine Similarity (MACS) and weighted Interference. Through ablations on initialization (random vs. orthogonal), regularization (L1 vs. L2), activation functions (ReLU vs. GELU), and noise types (bipolar vs. positive kurtosis), we test mitigations for incidental polysemanticity. Key findings: L2 regularization reduces polysemanticity by ~18% compared to L1, challenging the "sparse = interpretable" assumption in overcomplete settings.
 
-## Key Features
+This is an exploratory toy—designed for quick iteration and insight, not production. It demonstrates practical pitfalls (e.g., dying ReLUs) and mitigations (e.g., LeakyReLU revival). For full details, see the blog post on my research site: [Taming Incidental Polysemanticity in Toy Models](https://stanleyngugi.netlify.app/files/taming_polysemanticity).
 
-### 🔄 Temporal Dynamics Tracking
-- Per-epoch PSI computation with efficient memory management
-- Critical period detection using gradient analysis
-- Intervention timing optimization
-
-### 🎯 Automatic Intervention System
-- Threshold-triggered interventions (weight reset, orthogonal reset, noise injection)
-- Effectiveness tracking and adaptive strategy selection
-- Real-time intervention impact assessment
-
-### 📊 Comprehensive Analysis
-- Multi-scale visualization of PSI evolution
-- Intervention effectiveness analysis
-- Comparative configuration analysis
-
-### 💾 Single-GPU Optimized
-- Memory-efficient temporal tracking
-- Cached null baselines for PSI computation
-- Streamlined SAE training for real-time analysis
+## Features
+- **Synthetic Data Generation**: Correlated feature groups with tunable co-occurrence, sparsity, and non-linear targets to simulate "temptation" for entanglement.
+- **Modular Architecture**: MLP network with configurable init/reg/act/noise; overcomplete SAE for decomposition.
+- **Ablation Framework**: CLI-driven runs for 8 strategic combinations, from baseline (high poly) to max mitigation (low poly).
+- **Metrics Suite**: MACS (raw entanglement), calibrated MACS (null-adjusted), Interference (importance-weighted poly cost), sparsity measures (L0, W4), and reconstruction/performance MSE.
+- **Reproducibility**: Seeded runs, pinned dependencies, logging, and overlap plots for visualization.
 
 ## Installation
 
-```bash
-# Clone and setup environment
-git clone <repository>
-cd temporal-polysemanticity
-pip install -r requirements.txt
-```
-
-## Quick Start
-
-### Single Experiment
-```bash
-python main.py --mode single --init orthogonal --act gelu --reg l2 --correlation_schedule increasing --epochs 200
-```
-
-### Full Ablation Study
-```bash
-python main.py --mode ablation --epochs 200
-```
-
-### Analyze Existing Results
-```bash
-python main.py --mode analyze
-```
-
-## Configuration Options
-
-### Core Parameters
-- `--init`: Initialization method (`random`, `orthogonal`)
-- `--act`: Activation function (`relu`, `gelu`)
-- `--reg`: Regularization type (`l1`, `l2`)
-- `--correlation_schedule`: Data correlation evolution (`static`, `increasing`, `decreasing`, `pulse`)
-
-### Temporal Settings
-- `--epochs`: Training duration (default: 200)
-- PSI computation interval: Automatically set to epochs/20
-- Intervention check interval: Automatically set to epochs/10
-
-## Understanding the Output
-
-### Key Metrics
-
-1. **PSI Score**: Lower is better (less polysemantic)
-   - `< 0.5`: Good interpretability
-   - `0.5-1.0`: Moderate polysemanticity  
-   - `> 1.0`: High polysemanticity, intervention needed
-
-2. **Intervention Effectiveness**: PSI reduction after intervention
-   - Positive values indicate successful PSI reduction
-   - Tracked per intervention type for strategy optimization
-
-### Generated Files
-
-```
-experiments/temporal_experiment_YYYYMMDD_HHMMSS/
-├── experiment.log              # Detailed training log
-├── comparative_analysis.png    # Cross-experiment comparison
-├── {experiment_name}/
-│   ├── results.json           # Quantitative results
-│   ├── psi_trajectory.png     # PSI evolution over time
-│   ├── intervention_effectiveness.png
-│   └── temporal_data.pt       # Raw temporal data
-```
-
-## Experimental Design
-
-### Temporal Data Generation
-The framework uses sophisticated data generation with time-varying complexity:
-- **Static**: Fixed feature correlations throughout training
-- **Increasing**: Gradually introduce feature correlations
-- **Decreasing**: Start with high correlations, reduce over time
-- **Pulse**: Periodic correlation changes to test adaptation
-
-### PSI Computation
-Implements proper polysemanticity measurement:
-1. **Per-neuron clustering**: Analyzes whether individual neurons respond to multiple distinct concepts
-2. **Feature interference**: Measures correlation between different SAE features
-3. **Concept mixing**: Tracks how many true concepts each feature responds to
-4. **Null calibration**: Z-scores against random baselines for statistical reliability
-
-### Intervention Strategies
-- **Weight Reset**: Selectively reset problematic neuron weights
-- **Orthogonal Reset**: Re-apply orthogonal initialization
-- **Noise Injection**: Add controlled noise to escape local minima
-
-## Advanced Usage
-
-### Custom Configuration
-```python
-from models import Config
-
-custom_cfg = Config(
-    epochs=500,
-    psi_compute_interval=20,  # Check PSI every 20 epochs
-    psi_intervention_threshold=0.7,  # Trigger interventions above this PSI
-    feature_correlation_strength=0.4,  # Base correlation strength
-    correlation_schedule='pulse'  # Dynamic correlation pattern
-)
-```
-
-### Manual Intervention Timing
-```python
-# In training loop
-if epoch == 100:  # Manual intervention at specific epoch
-    model.apply_intervention('orthogonal_reset', strength=1.0)
-```
-
-### Custom PSI Analysis
-```python
-from utils import PSIComputer
-
-psi_computer = PSIComputer(cfg)
-psi_scores = psi_computer.compute_temporal_psi(sae, activations, input_data, labels)
-print(f"PSI Components: {psi_scores}")
-```
-
-## Research Applications
-
-### Critical Period Studies
-- Identify when networks transition from monosemantic to polysemantic states
-- Test intervention timing hypotheses
-- Study plasticity windows for interpretability
-
-### Intervention Optimization  
-- Compare intervention strategies across different network architectures
-- Optimize intervention scheduling for maximum effectiveness
-- Study long-term effects of early interventions
-
-### Scalability Research
-- Test findings on larger models
-- Investigate layer-specific polysemanticity evolution
-- Study cross-model intervention transfer
-
-## Performance Considerations
-
-### Single GPU Optimization
-- **Memory Management**: Automatic snapshot pruning (max 50 snapshots)
-- **Computation Efficiency**: Cached null baselines, streamlined SAE training
-- **Storage**: Compressed temporal data with selective sampling
-
-### Recommended Hardware
-- **Minimum**: 8GB GPU memory, 16GB RAM
-- **Recommended**: 12GB+ GPU memory, 32GB+ RAM for extended experiments
-
-## Troubleshooting
-
-### Common Issues
-
-1. **CUDA Out of Memory**
-   ```bash
-   # Reduce batch size or snapshot frequency
-   python main.py --mode single --epochs 100  # Shorter experiments
+1. **Clone the Repository**:
+   ```
+   git clone https://github.com/stanleyngugi/taming_polysemanticity.git
+   cd taming_polysemanticity
    ```
 
-2. **PSI Computation Fails**
-   - Usually due to inactive SAE features
-   - Framework automatically handles edge cases
+2. **Set Up Virtual Environment** (Recommended to avoid conflicts):
+   ```
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
-3. **Intervention Not Triggering**
-   - Check PSI threshold settings
-   - Verify intervention check interval
+3. **Install Dependencies**:
+   ```
+   pip install -r requirements.txt
+   ```
+   The `requirements.txt` pins versions for reproducibility (e.g., torch==2.4.1, numpy==2.1.1). Note: If you encounter conflicts (e.g., with torchvision or numba), use the virtual env or uninstall unused packages.
 
-### Debugging
-Enable verbose logging:
-```python
-import logging
-logging.getLogger().setLevel(logging.DEBUG)
+## Usage
+
+Run ablations via the CLI in `main.py`. Each command executes a specific combination over `--seeds` (default 10) for variance estimation. Results are logged to `experiment.log` and printed, with cosine overlap plots saved as PNGs.
+
+### Example Commands for Key Ablations
+1. **Baseline (Random + Bipolar + L1 + ReLU)**:  
+   `python main.py --init random --noise bipolar --reg l1 --act relu --seeds 10`
+
+2. **Orthogonal Init Only**:  
+   `python main.py --init orthogonal --noise bipolar --reg l1 --act relu --seeds 10`
+
+3. **Positive Kurtosis Noise Only**:  
+   `python main.py --init random --noise positive_kurtosis --reg l1 --act relu --seeds 10`
+
+4. **L2 Reg + GELU Act Only**:  
+   `python main.py --init random --noise bipolar --reg l2 --act gelu --seeds 10`
+
+5. **Orthogonal + L2 + GELU**:  
+   `python main.py --init orthogonal --noise bipolar --reg l2 --act gelu --seeds 10`
+
+6. **Orthogonal + Positive Kurtosis + L1 + ReLU**:  
+   `python main.py --init orthogonal --noise positive_kurtosis --reg l1 --act relu --seeds 10`
+
+7. **Random + Positive Kurtosis + L2 + ReLU**:  
+   `python main.py --init random --noise positive_kurtosis --reg l2 --act relu --seeds 10`
+
+8. **Max Mitigation (Orthogonal + Positive Kurtosis + L2 + GELU)**:  
+   `python main.py --init orthogonal --noise positive_kurtosis --reg l2 --act gelu --seeds 10`
+
+To run all in batch, create a script like `run_ablations.sh`:
 ```
-
-## Theoretical Background
-
-This implementation builds on several key insights:
-
-1. **Incidental vs. Necessary Polysemanticity**: Distinguishes between polysemanticity from capacity constraints vs. training artifacts
-2. **Temporal Dynamics**: Polysemanticity evolution during training offers intervention opportunities
-3. **Critical Periods**: Certain training phases are more amenable to interpretability interventions
-4. **Intervention Timing**: Strategic timing can be more effective than intervention strength
-
-## Citation
-
-If you use this framework in research, please cite:
-```bibtex
-@software{temporal_polysemanticity_framework,
-  title={Temporal Polysemanticity Experiment Framework},
-  author={[Your Name]},
-  year={2025},
-  url={[Repository URL]}
-}
+#!/bin/bash
+python main.py --init random --noise bipolar --reg l1 --act relu --seeds 10
+# Add other commands...
 ```
+Then: `bash run_ablations.sh`.
 
-## Contributing
+### Interpreting Outputs
+- **Logs**: Per-seed metrics in `experiment.log` (e.g., "Seed 0 Metrics: MACS 0.2954...").
+- **Averages**: Printed at end (e.g., "Average Interference: 6.3689 +/- 1.2965").
+- **Plots**: Cosine overlap matrices as `overlap_[config]_seed[N].png`—high off-diagonals indicate polysemanticity.
+- **Key Insights from Runs**: L2 combos show lower poly (Inter ~6.4-7.1 vs. L1 ~8.1-9.1), with max mitigation achieving -26.8% Interference reduction.
 
-1. Fork the repository
-2. Create feature branch
-3. Add tests for new functionality
-4. Submit pull request with detailed description
+## Project Structure
+- `models.py`: Defines Config dataclass, Network (MLP with ablatable init/act/reg), and SAE (with LeakyReLU/bias fixes for revival).
+- `utils.py`: Data generation (correlated groups, importances, targets), noise injection, metrics (MACS/calib, Interference, sparsity), and plotting.
+- `main.py`: CLI orchestration—data gen, training loops (with hooks for hidden acts), SAE training, metric computation, logging/plots.
+- `requirements.txt`: Pinned deps (e.g., torch==2.4.1) for repro.
+- `experiment.log`: Output logs from runs.
+- `overlap_*.png`: Generated visualization files.
 
-## License
+## Limitations and Future Work
+- **Toy-Only**: Synthetic data limits real-world applicability—extend to PEFT/LoRA fine-tuning on LLMs like Llama to probe poly in adapters without catastrophic forgetting.
+- **Volatility**: SAE_MSE high variance (CV 50-492%) from pos kurt tails—add gradient clipping (norm=1.0) to stabilize.
+- **Scope**: Overcapacity focus; test mild bottlenecks (hidden_dim=9) for phase boundaries.
+- **Enhancements**: Incorporate ProLU/JumpReLU for SAEs (+15-20% fidelity); full PSI metrics; lambda/sparsity sweeps.
 
-[Specify your license here]
+## Acknowledgments and References
+Thanks to the MI community for inspiration. Key references:
+- Lecomte, V., et al. (2023). What Causes Polysemanticity? An Alternative Origin Story... arXiv:2312.03096. [Link](https://arxiv.org/abs/2312.03096)
+- Elhage, N., et al. (2022). Toy Models of Superposition. arXiv:2209.10652. [Link](https://arxiv.org/abs/2209.10652)
+- Authors of PSI (2024). Disentangling Polysemantic Neurons... arXiv:2508.16950. [Link](https://arxiv.org/abs/2508.16950)
+- Bricken, T., et al. (2023). Towards Monosemanticity... [Link](https://transformer-circuits.pub/2023/monosemantic-features)
+- Templeton, A., et al. (2024). Scaling Monosemanticity... Anthropic. [Link](https://anthropic.com/research/scaling-monosemanticity)
 
----
-
-For questions or issues, please open an issue on the repository or contact the maintainers.
+For feedback or collaborations, reach me at sngugi.research@gmail.com. Happy experimenting!
