@@ -1,12 +1,22 @@
 # Polysemanticity Toy Model Experiment
 
+> [!NOTE]
+> **Retrospective note.** On later review, I identified limitations that weaken
+> the causal interpretation of these results. In particular, the headline
+> comparison changed both regularization and activation function, while some of
+> the experimental metrics require stronger validation. The numerical results
+> below should therefore be read as descriptive observations from an exploratory
+> toy-model study—not as evidence that L2 regularization alone reduces
+> polysemanticity. I am preserving the project as a record of the experiment and
+> the hypotheses it generated.
+
 ## Overview
 
 This repository contains a PyTorch-based toy model for studying incidental polysemanticity in neural networks, inspired by foundational work in mechanistic interpretability (MI). Polysemanticity refers to the phenomenon where individual neurons or latents activate for multiple unrelated features, complicating model auditability and safety. While superposition theory attributes this to capacity constraints, incidental polysemanticity arises from training artifacts like regularization or noise, even in overcapacity regimes.
 
 The experiment uses a simple MLP trained on synthetic correlated data, followed by a sparse autoencoder (SAE) to decompose representations and measure entanglement via metrics like Mean Absolute Cosine Similarity (MACS) and weighted Interference. Through ablations on initialization (random vs. orthogonal), regularization (L1 vs. L2), activation functions (ReLU vs. GELU), and noise types (bipolar vs. positive kurtosis), we test mitigations for incidental polysemanticity. Key findings: L2 regularization reduces polysemanticity by ~18% compared to L1, challenging the "sparse = interpretable" assumption in overcomplete settings.
 
-This is an exploratory toy—designed for quick iteration and insight, not production. It demonstrates practical pitfalls (e.g., dying ReLUs) and mitigations (e.g., LeakyReLU revival). For full details, see the blog post on my research site: [Taming Incidental Polysemanticity in Toy Models](https://stanleyngugi.netlify.app/files/taming_polysemanticity).
+This is an exploratory toy—designed for quick iteration and insight, not production. It demonstrates practical pitfalls (e.g., dying ReLUs) and mitigations (e.g., LeakyReLU revival). For full details, see the blog post on my research site: [Taming Incidental Polysemanticity in Toy Models](https://stanleyngugi.netlify.app/posts/taming_polysemanticity).
 
 ## Features
 - **Synthetic Data Generation**: Correlated feature groups with tunable co-occurrence, sparsity, and non-linear targets to simulate "temptation" for entanglement.
@@ -87,6 +97,8 @@ Then: `bash run_ablations.sh`.
 - `overlap_*.png`: Generated visualization files.
 
 ## Limitations and Future Work
+- **Ablation confounding**: The headline comparison changes both the regularizer and activation function, so it does not isolate an L1-versus-L2 causal effect.
+- **Metric validation**: The calibrated MACS, L0, reconstruction, and importance-weighted interference implementations require further validation before being treated as robust measurements.
 - **Toy-Only**: Synthetic data limits real-world applicability—extend to PEFT/LoRA fine-tuning on LLMs like Llama to probe poly in adapters without catastrophic forgetting.
 - **Volatility**: SAE_MSE high variance (CV 50-492%) from pos kurt tails—add gradient clipping (norm=1.0) to stabilize.
 - **Scope**: Overcapacity focus; test mild bottlenecks (hidden_dim=9) for phase boundaries.
