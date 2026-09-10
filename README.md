@@ -1,14 +1,13 @@
 # Polysemanticity Toy Model Experiment
 
 > [!NOTE]
-> **Retrospective note.** On later review, I identified limitations that weaken
-> the causal interpretation of these results. In particular, the headline
-> comparison changed both regularization and activation function, while some of
-> the experimental metrics require stronger validation. The numerical results
-> below should therefore be read as descriptive observations from an exploratory
-> toy-model study—not as evidence that L2 regularization alone reduces
-> polysemanticity. I am preserving the project as a record of the experiment and
-> the hypotheses it generated.
+> **Retrospective note.** This exploratory study compared full training
+> configurations rather than isolating every factor. Because the headline
+> L1/ReLU and L2/GELU settings differ in both regularization and activation, the
+> 17.9% result is best read as a configuration-level observation that motivates
+> the proposed mechanism, rather than a controlled estimate of the effect of L2
+> alone. The project is preserved for its experimental findings, debugging
+> process, and the hypotheses it generated.
 
 ## Overview
 
@@ -96,9 +95,9 @@ Then: `bash run_ablations.sh`.
 - `experiment.log`: Output logs from runs.
 - `overlap_*.png`: Generated visualization files.
 
-## Limitations and Future Work
-- **Ablation confounding**: The headline comparison changes both the regularizer and activation function, so it does not isolate an L1-versus-L2 causal effect.
-- **Metric validation**: The calibrated MACS, L0, reconstruction, and importance-weighted interference implementations require further validation before being treated as robust measurements.
+## Scope and Future Work
+- **Ablation scope**: The headline result compares L1/ReLU and L2/GELU configurations. A factorial ablation would separate the contribution of each choice.
+- **Exploratory metrics**: Calibrated MACS, L0, reconstruction, and importance-weighted interference are experimental proxies intended for within-study comparison.
 - **Toy-Only**: Synthetic data limits real-world applicability—extend to PEFT/LoRA fine-tuning on LLMs like Llama to probe poly in adapters without catastrophic forgetting.
 - **Volatility**: SAE_MSE high variance (CV 50-492%) from pos kurt tails—add gradient clipping (norm=1.0) to stabilize.
 - **Scope**: Overcapacity focus; test mild bottlenecks (hidden_dim=9) for phase boundaries.
